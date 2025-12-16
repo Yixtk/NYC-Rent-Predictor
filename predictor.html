@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NYC Rent Predictor</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    .lucide { width: 1em; height: 1em; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState } = React;
+    
+    // Simple icon components using SVG
+    const Home = ({ className }) => (
+      <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+      </svg>
+    );
+    
+    const TrendingUp = ({ className }) => (
+      <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+      </svg>
+    );
+    
+    const DollarSign = ({ className }) => (
+      <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    );
+    
+    const Calendar = ({ className }) => (
+      <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+      </svg>
+    );
+    
+    const MapPin = ({ className }) => (
+      <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+      </svg>
+    );
+    
+    const Info = ({ className }) => (
+      <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    );
+
+    const NYCRentPredictor = () => {
+      const [formData, setFormData] = useState({
+        bedrooms: '1',
+        borough: 'Manhattan',
+        moveInMonth: '2025-12'
+      });
+      
+      const [prediction, setPrediction] = useState(null);
+      const [loading, setLoading] = useState(false);
+
+      // Layer 1: Deterministic Base - Base rent data based on medianAskingRent 2024 data
+      const baseRents = {
+        Manhattan: { studio: 2869, '1br': 3443, '2br': 4755, '3br': 6149 },
+        Brooklyn: { studio: 2475, '1br': 2829, '2br': 3713, '3br': 4862 },
+        Queens: { studio: 2140, '1br': 2530, '2br': 3308, '3br': 4086 },
+        Bronx: { studio: 2013, '1br': 2330, '2br': 3072, '3br': 3813 },
+        'Staten Island': { studio: 1851, '1br': 2221, '2br': 2869, '3br': 3610 }
+      };
+
+      // Layer 1: Annual trend (inflation set to 3% per year)
+      const getYearGrowthFactor = (yearMonth) => {
+        const year = parseInt(yearMonth.split('-')[0]);
+        return year === 2025 ? 1.0 : 1.03; // 3% annual inflation for 2026
+      };
+
+      // Layer 1: Seasonal factors based on medianAskingRent data analysis
+      const getSeasonalFactor = (yearMonth) => {
+        const month = parseInt(yearMonth.split('-')[1]);
+        const factors = {
+          1: 0.969, 2: 0.979, 3: 0.986, 4: 0.998, 5: 1.005, 6: 1.010,
+          7: 1.015, 8: 1.023, 9: 1.023, 10: 1.008, 11: 1.006, 12: 0.977
+        };
+        return factors[month];
+      };
+
+      // Layer 2: Borough-specific variation
+      const getBoroughVariation = (borough) => {
+        const variations = {
+          'Manhattan': 0.18,        // ±18%
+          'Brooklyn': 0.12,         // ±12%
+          'Queens': 0.12,           // ±12%
+          'Bronx': 0.08,           // ±8%
+          'Staten Island': 0.08    // ±8%
+        };
+        return variations[borough];
+      };
+
+      // Monte Carlo simulation with simplified 2-layer structure
+      const runMonteCarloSimulation = (basePrice, numSimulations = 10000) => {
+        const results = [];
+        
+        // Layer 1: Calculate deterministic baseline
+        const yearGrowth = getYearGrowthFactor(formData.moveInMonth);
+        const seasonalFactor = getSeasonalFactor(formData.moveInMonth);
+        const deterministicBase = basePrice * yearGrowth * seasonalFactor;
+        
+        // Layer 2 & 3: Structured stochastic variation via Monte Carlo
+        const boroughVar = getBoroughVariation(formData.borough);
+        
+        for (let i = 0; i < numSimulations; i++) {
+          // Market-wide noise (±5%)
+          const marketNoise = (Math.random() - 0.5) * 0.10;
+          
+          // Borough-specific variation (heterogeneous by location)
+          const boroughVariation = (Math.random() - 0.5) * 2 * boroughVar;
+          
+          // Calculate simulated price
+          const simulatedPrice = deterministicBase * 
+            (1 + marketNoise) * 
+            (1 + boroughVariation);
+          
+          results.push(Math.round(simulatedPrice));
+        }
+        
+        return results.sort((a, b) => a - b);
+      };
+
+      const calculatePrediction = () => {
+        setLoading(true);
+        
+        setTimeout(() => {
+          const roomType = formData.bedrooms === 'studio' ? 'studio' : `${formData.bedrooms}br`;
+          const basePrice = baseRents[formData.borough][roomType];
+          
+          // Calculate deterministic baseline
+          const yearGrowth = getYearGrowthFactor(formData.moveInMonth);
+          const seasonalFactor = getSeasonalFactor(formData.moveInMonth);
+          const deterministicBase = Math.round(basePrice * yearGrowth * seasonalFactor);
+          
+          // Run Monte Carlo simulation
+          const simResults = runMonteCarloSimulation(basePrice);
+          
+          // Statistical analysis
+          const mean = simResults.reduce((a, b) => a + b, 0) / simResults.length;
+          const p10 = simResults[Math.floor(simResults.length * 0.10)];
+          const p25 = simResults[Math.floor(simResults.length * 0.25)];
+          const p50 = simResults[Math.floor(simResults.length * 0.50)];
+          const p75 = simResults[Math.floor(simResults.length * 0.75)];
+          const p90 = simResults[Math.floor(simResults.length * 0.90)];
+          
+          // Price distribution
+          const distribution = [];
+          const binSize = 200;
+          const minPrice = Math.floor(simResults[0] / binSize) * binSize;
+          const maxPrice = Math.ceil(simResults[simResults.length - 1] / binSize) * binSize;
+          
+          for (let price = minPrice; price <= maxPrice; price += binSize) {
+            const count = simResults.filter(p => p >= price && p < price + binSize).length;
+            if (count > 0) {
+              distribution.push({ price, count, percentage: (count / simResults.length * 100).toFixed(1) });
+            }
+          }
+          
+          setPrediction({
+            mean: Math.round(mean),
+            p10, p25, p50, p75, p90,
+            distribution,
+            confidence80: [p10, p90],
+            confidence50: [p25, p75],
+            basePrice,
+            deterministicBase,
+            yearGrowth,
+            seasonalFactor,
+            boroughVar: getBoroughVariation(formData.borough)
+          });
+          
+          setLoading(false);
+        }, 500);
+      };
+
+      // Generate month options from Dec 2025 to Nov 2026
+      const monthOptions = [
+        { value: '2025-12', label: 'December 2025' },
+        ...Array.from({length: 11}, (_, i) => ({ 
+          value: `2026-${String(i + 1).padStart(2, '0')}`, 
+          label: new Date(2026, i).toLocaleString('en-US', { month: 'long', year: 'numeric' })
+        }))
+      ];
+
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
+          <div className="max-w-5xl mx-auto">
+            <div className="bg-white rounded-2xl shadow-xl p-8 mb-6">
+              <div className="flex items-center gap-3 mb-4">
+                <Home className="w-8 h-8 text-indigo-600" />
+                <h1 className="text-3xl font-bold text-gray-800">NYC Rent Predictor</h1>
+              </div>
+              
+              <div className="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6">
+                <div className="flex items-start gap-2">
+                  <Info className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                  <div className="text-sm text-blue-900">
+                    <p className="font-semibold mb-1">Three-Layer Monte Carlo Model:</p>
+                    <p><strong>Layer 1 (Deterministic):</strong> Base rent × Annual trend × Seasonal factor</p>
+                    <p><strong>Layer 2 (Stochastic):</strong> Market noise (±5%) + Borough variation (±8-18%)</p>
+                    <p><strong>Layer 3 (Aggregation):</strong> 10,000 simulations → Probability distribution</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid md:grid-cols-3 gap-6 mb-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <MapPin className="w-4 h-4 inline mr-1" />
+                    Borough
+                  </label>
+                  <select 
+                    value={formData.borough}
+                    onChange={(e) => setFormData({...formData, borough: e.target.value})}
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  >
+                    <option value="Manhattan">Manhattan (±18% variation)</option>
+                    <option value="Brooklyn">Brooklyn (±12% variation)</option>
+                    <option value="Queens">Queens (±12% variation)</option>
+                    <option value="Bronx">Bronx (±8% variation)</option>
+                    <option value="Staten Island">Staten Island (±8% variation)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <Home className="w-4 h-4 inline mr-1" />
+                    Property Type
+                  </label>
+                  <select 
+                    value={formData.bedrooms}
+                    onChange={(e) => setFormData({...formData, bedrooms: e.target.value})}
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  >
+                    <option value="studio">Studio</option>
+                    <option value="1">1 Bedroom</option>
+                    <option value="2">2 Bedrooms</option>
+                    <option value="3">3 Bedrooms</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <Calendar className="w-4 h-4 inline mr-1" />
+                    Move-in Month
+                  </label>
+                  <select 
+                    value={formData.moveInMonth}
+                    onChange={(e) => setFormData({...formData, moveInMonth: e.target.value})}
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  >
+                    {monthOptions.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <button
+                onClick={calculatePrediction}
+                disabled={loading}
+                className="w-full bg-indigo-600 text-white py-3 px-6 rounded-lg font-semibold hover:bg-indigo-700 transition-colors disabled:bg-gray-400 flex items-center justify-center gap-2"
+              >
+                <TrendingUp className="w-5 h-5" />
+                {loading ? 'Calculating...' : 'Run Monte Carlo Simulation'}
+              </button>
+            </div>
+
+            {prediction && (
+              <>
+                {/* Layer 1: Deterministic Baseline */}
+                <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                    <span className="bg-green-100 text-green-800 px-2 py-1 rounded text-xs">Layer 1</span>
+                    Deterministic Baseline
+                  </h3>
+                  <div className="grid grid-cols-4 gap-4">
+                    <div className="text-center p-4 bg-gray-50 rounded-lg">
+                      <div className="text-xs text-gray-500 mb-1">Base Rent</div>
+                      <div className="text-xl font-bold text-gray-800">${prediction.basePrice.toLocaleString()}</div>
+                    </div>
+                    <div className="text-center p-4 bg-gray-50 rounded-lg">
+                      <div className="text-xs text-gray-500 mb-1">Year Growth</div>
+                      <div className="text-xl font-bold text-gray-800">×{prediction.yearGrowth.toFixed(2)}</div>
+                    </div>
+                    <div className="text-center p-4 bg-gray-50 rounded-lg">
+                      <div className="text-xs text-gray-500 mb-1">Seasonal</div>
+                      <div className="text-xl font-bold text-gray-800">×{prediction.seasonalFactor.toFixed(2)}</div>
+                    </div>
+                    <div className="text-center p-4 bg-indigo-50 rounded-lg border-2 border-indigo-200">
+                      <div className="text-xs text-indigo-600 mb-1 font-semibold">Expected Baseline</div>
+                      <div className="text-xl font-bold text-indigo-600">${prediction.deterministicBase.toLocaleString()}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Layer 2: Stochastic Parameters */}
+                <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                    <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded text-xs">Layer 2</span>
+                    Stochastic Variation
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-4 bg-gray-50 rounded-lg">
+                      <div className="text-sm text-gray-600 mb-2">Market-wide Noise</div>
+                      <div className="text-2xl font-bold text-gray-800">±5%</div>
+                      <div className="text-xs text-gray-500 mt-1">Captures overall market volatility</div>
+                    </div>
+                    <div className="p-4 bg-gray-50 rounded-lg">
+                      <div className="text-sm text-gray-600 mb-2">{formData.borough} Variation</div>
+                      <div className="text-2xl font-bold text-gray-800">±{(prediction.boroughVar * 100).toFixed(0)}%</div>
+                      <div className="text-xs text-gray-500 mt-1">Borough-specific heterogeneity</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Layer 3: Monte Carlo Results */}
+                <div className="grid md:grid-cols-2 gap-6 mb-6">
+                  <div className="bg-white rounded-xl shadow-lg p-6">
+                    <div className="flex items-center gap-2 mb-4">
+                      <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs">Layer 3</span>
+                      <h3 className="text-lg font-semibold text-gray-800">Predicted Median</h3>
+                    </div>
+                    <div className="text-4xl font-bold text-indigo-600 mb-2">
+                      ${prediction.p50.toLocaleString()}
+                    </div>
+                    <p className="text-sm text-gray-600">Monthly rent (50th percentile)</p>
+                    <div className="mt-3 text-xs text-gray-500">
+                      From deterministic ${prediction.deterministicBase.toLocaleString()} 
+                      → ${Math.abs(prediction.p50 - prediction.deterministicBase)} {prediction.p50 > prediction.deterministicBase ? 'increase' : 'decrease'}
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-xl shadow-lg p-6">
+                    <h3 className="text-lg font-semibold text-gray-800 mb-4">80% Confidence Interval</h3>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-2xl font-bold text-gray-700">
+                          ${prediction.confidence80[0].toLocaleString()}
+                        </div>
+                        <p className="text-xs text-gray-500">10th percentile</p>
+                      </div>
+                      <div className="text-gray-400 text-xl">→</div>
+                      <div>
+                        <div className="text-2xl font-bold text-gray-700">
+                          ${prediction.confidence80[1].toLocaleString()}
+                        </div>
+                        <p className="text-xs text-gray-500">90th percentile</p>
+                      </div>
+                    </div>
+                    <div className="mt-3 text-xs text-gray-600 bg-gray-50 p-2 rounded">
+                      Range: ${(prediction.confidence80[1] - prediction.confidence80[0]).toLocaleString()} 
+                      ({((prediction.confidence80[1] - prediction.confidence80[0]) / prediction.p50 * 100).toFixed(1)}% of median)
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4">Price Percentiles</h3>
+                  <div className="grid grid-cols-5 gap-4">
+                    {[
+                      { label: 'P10', value: prediction.p10, desc: '10% below' },
+                      { label: 'P25', value: prediction.p25, desc: '25% below' },
+                      { label: 'P50', value: prediction.p50, desc: 'Median' },
+                      { label: 'P75', value: prediction.p75, desc: '75% below' },
+                      { label: 'P90', value: prediction.p90, desc: '90% below' }
+                    ].map((item, idx) => (
+                      <div key={idx} className="text-center p-3 bg-gray-50 rounded-lg">
+                        <div className="text-xs text-gray-500 mb-1">{item.label}</div>
+                        <div className="text-lg font-bold text-gray-800">
+                          ${item.value.toLocaleString()}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">{item.desc}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-lg p-6">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4">Price Distribution (10,000 simulations)</h3>
+                  <div className="space-y-2">
+                    {prediction.distribution.slice(0, 15).map((bin, idx) => (
+                      <div key={idx} className="flex items-center gap-3">
+                        <div className="w-32 text-sm text-gray-600">
+                          ${bin.price.toLocaleString()}
+                        </div>
+                        <div className="flex-1 bg-gray-200 rounded-full h-6 overflow-hidden">
+                          <div 
+                            className="bg-indigo-600 h-full rounded-full transition-all flex items-center justify-end pr-2"
+                            style={{width: `${Math.min(100, bin.percentage * 2)}%`}}
+                          >
+                            <span className="text-xs text-white font-medium">
+                              {bin.percentage}%
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 mt-6">
+                  <h4 className="font-semibold text-blue-900 mb-2">📊 Model Interpretation</h4>
+                  <ul className="text-sm text-blue-800 space-y-1">
+                    <li>• <strong>Layer 1 baseline</strong> (${prediction.deterministicBase.toLocaleString()}) represents the long-term equilibrium</li>
+                    <li>• <strong>Layer 2 variation</strong> captures market volatility and borough-specific heterogeneity</li>
+                    <li>• <strong>Layer 3 distribution</strong> shows 80% of units fall within ${(prediction.confidence80[1] - prediction.confidence80[0]).toLocaleString()} range</li>
+                    <li>• Higher borough variation (Manhattan: ±18%) creates wider confidence intervals</li>
+                  </ul>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      );
+    };
+
+    ReactDOM.render(<NYCRentPredictor />, document.getElementById('root'));
+  </script>
+</body>
+</html>
