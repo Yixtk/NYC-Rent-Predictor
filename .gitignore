@@ -1,0 +1,11 @@
+# CSV data file (too large for GitHub)
+medianAskingRent_All.csv
+
+# macOS
+.DS_Store
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
