@@ -413,18 +413,29 @@
                   </div>
                 </div>
 
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 mt-6">
-                  <h4 className="font-semibold text-blue-900 mb-2">📊 Model Interpretation</h4>
-                  <ul className="text-sm text-blue-800 space-y-1">
-                    <li>• <strong>Layer 1 baseline</strong> (${prediction.deterministicBase.toLocaleString()}) represents the long-term equilibrium</li>
-                    <li>• <strong>Layer 2 variation</strong> captures market volatility and borough-specific heterogeneity</li>
-                    <li>• <strong>Layer 3 distribution</strong> shows 80% of units fall within ${(prediction.confidence80[1] - prediction.confidence80[0]).toLocaleString()} range</li>
-                    <li>• Higher borough variation (Manhattan: ±18%) creates wider confidence intervals</li>
-                  </ul>
-                </div>
-              </>
-            )}
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 mt-6">
+                <h4 className="font-semibold text-blue-900 mb-2">📊 Model Interpretation</h4>
+                <ul className="text-sm text-blue-800 space-y-1">
+                  <li>• <strong>Layer 1 baseline</strong> (${prediction.deterministicBase.toLocaleString()}) represents the long-term equilibrium</li>
+                  <li>• <strong>Layer 2 variation</strong> captures market volatility and borough-specific heterogeneity</li>
+                  <li>• <strong>Layer 3 distribution</strong> shows 80% of units fall within ${(prediction.confidence80[1] - prediction.confidence80[0]).toLocaleString()} range</li>
+                  <li>• Higher borough variation (Manhattan: ±18%) creates wider confidence intervals</li>
+                </ul>
+              </div>
+            </>
+          )}
+
+          {/* Data Source Information */}
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-6 mt-6">
+            <h4 className="font-semibold text-gray-900 mb-3">📂 Data Sources</h4>
+            <div className="text-sm text-gray-700 space-y-2">
+              <p><strong>Base Rents:</strong> Derived from NYC median asking rent data (2024), scaled by borough and property type. Average 2024 borough rents: Manhattan $4,304, Brooklyn $3,470, Queens $3,016, Bronx $2,807, Staten Island $2,638.</p>
+              <p><strong>Seasonal Factors:</strong> Calculated from historical median asking rent patterns (2010-2025), showing peak demand in August-September (1.023x) and lowest in February (0.979x).</p>
+              <p><strong>Annual Inflation:</strong> Set at 3% per year based on recent rental market trends.</p>
+              <p className="text-xs text-gray-500 mt-3">Data Source: NYC Median Asking Rent dataset. Model assumes all other factors (neighborhood quality, amenities, building age) are held constant.</p>
+            </div>
           </div>
+        </div>
         </div>
       );
     };
